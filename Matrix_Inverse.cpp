@@ -5,21 +5,32 @@
 #define  ARRAYSIZE	100
 #define  MASTER		0
 
+#define COMM MPI_COMM_WORLD
+#define NO_STATUS MPI_STATUS_IGNORE
+#define STOP 42
+
 using namespace std;
 
 double matrix[ARRAYSIZE * ARRAYSIZE];
 double inverse[ARRAYSIZE * ARRAYSIZE];
 
+void printmatrix(double *A, int n)
+{
+	for(int i = 0; i < n; i++)
+	{
+		for(int j = 0; j < n; j++)
+			printf("%.2f ", A[i * n + j]);
+		printf("\n");
+	}
+	cout<<endl;
+}
+
 int main (int argc, char *argv[])
 {
-	int N, i, j, it, row, column, rowno, recvrow, flag = 0;
+	int N, i, j, it, rowno, recvrow, flag = 0;
 	cin >> N;
 
-	// double *matrix = new double[N * N];
-	// double *inverse = new double[N * N];
-
 	int tag1, tag2, tag3, tag4, tag5, tag6;
-
 	int numtasks, taskid, dest, source, loops, rem; 
 
 	tag6 = 1;
@@ -52,23 +63,20 @@ int main (int argc, char *argv[])
 		return 0;
 	}
 
+	int row, column;
+
 	/***** Initializations *****/
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 	MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
 
+
 	if(taskid == MASTER)
 	{
-		row = 0;
-		column = 0;
-		loops = (N - 1) / (numtasks - 1);
-		rem = (N - 1) % (numtasks - 1);
 		for(dest = 1; dest < numtasks; dest++)
 		{
 			MPI_Send(&N, 1, MPI_INT, dest, tag1, MPI_COMM_WORLD);
 			MPI_Send(&numtasks, 1, MPI_INT, dest, tag2, MPI_COMM_WORLD);
-			MPI_Send(&matrix[0], N*N, MPI_DOUBLE, dest, tag3, MPI_COMM_WORLD);
-			MPI_Send(&inverse[0], N*N, MPI_DOUBLE, dest, tag4, MPI_COMM_WORLD);
 		}
 	}
 	if(taskid > MASTER)
@@ -76,29 +84,15 @@ int main (int argc, char *argv[])
 		source = MASTER;
 		MPI_Recv(&N, 1, MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
 		MPI_Recv(&numtasks, 1, MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
-		MPI_Recv(&matrix[0], N*N, MPI_DOUBLE, source, tag3, MPI_COMM_WORLD, &status);
-		MPI_Recv(&inverse[0], N*N, MPI_DOUBLE, source, tag4, MPI_COMM_WORLD, &status);
-		// cout << numtasks << endl;
-
-		row = 0;
-		column = 0;
-		loops = (N - 1) / (numtasks - 1);
-		rem = (N - 1) % (numtasks - 1);
-		// cout << loops << endl;
-
-		// for(i = 0; i < N; i++)
-		// {
-		// 	for(j = 0; j < N; j++)
-		// 		cout<<inverse[i * N + j] << " ";
-		// 	cout<<endl;
-		// }
 	}
 
-	for(i = 0; i < N; i++)
+	if(taskid == MASTER)
 	{
-		// printf ("MPI task %d has started...\n", taskid);
-		if(taskid == MASTER)
+		for(i = 0; i < N; i++)
 		{
+			row = i;
+			column = i;
+
 			// checks if the head of the current row is zero
 			if(matrix[row * N + column] == 0)
 			{
@@ -107,6 +101,8 @@ int main (int argc, char *argv[])
 				{
 					if(matrix[check * N + column] == 0)
 						check++;
+					else
+						break;
 				}
 
 				// if it reaches the end, that means the matrix is not invertible
@@ -114,7 +110,7 @@ int main (int argc, char *argv[])
 				{
 					cout << "Matrix not invertible" << endl;
 					flag = 1;
-					break;
+					MPI_Abort(MPI_COMM_WORLD, 0);
 				}
 				// otherwise, add the two rows, and make the head 1
 				else
@@ -138,154 +134,85 @@ int main (int argc, char *argv[])
 					inverse[row * N + it] /= divisor;
 			}
 
-			recvrow = rowno = -1;
+			rowno = -1;
+			int temp = row;
 
-			cout << "[" << taskid << "] " << "Sending, row - " << i << endl;
-
-			for(j = 0; j < loops; j++)
-			{
-				for(dest = 1; dest < numtasks; dest++)
-				{
-					rowno++;
-					if(rowno == row)
-						rowno++;
-
-					cout << "[" << taskid << "] " << "Sendprocess - " << dest << endl;
-
-					MPI_Send(&row, 1, MPI_INT, dest, tag1, MPI_COMM_WORLD);
-					MPI_Send(&rowno, 1, MPI_INT, dest, tag2, MPI_COMM_WORLD);
-				}
-
-				for(dest = 1; dest < numtasks; dest++)
-				{
-					recvrow++;
-					if(recvrow == row)
-						recvrow++;
-
-					cout << "[" << taskid << "] " << "Receiving, process - " << dest << endl;
-
-					MPI_Recv(&matrix[recvrow * N], N, MPI_DOUBLE, dest, dest, MPI_COMM_WORLD, &status);
-					MPI_Recv(&inverse[recvrow * N], N, MPI_DOUBLE, dest, dest, MPI_COMM_WORLD, &status);
-				}
-			}
-
-			cout << "[" << taskid << "] " << "We are out with rem - " << rem << endl;
-
-			// recvrow = row;
-			for(dest = 1; dest <= rem; dest++)
+			for(dest = 1; dest < N; dest++)
 			{
 				rowno++;
-				if(rowno == row)
+				if(rowno == temp)
 					rowno++;
 
-				cout << "[" << taskid << "] " << "Sendprocess - " << dest << endl;
+				int to = ((dest - 1) % (numtasks - 1)) + 1;
 
-				MPI_Send(&row, 1, MPI_INT, dest, tag1, MPI_COMM_WORLD);
-				MPI_Send(&rowno, 1, MPI_INT, dest, tag2, MPI_COMM_WORLD);
+				MPI_Send(&rowno, 1, MPI_INT, to, tag1, MPI_COMM_WORLD);
+				MPI_Send(&inverse[rowno * N], N, MPI_DOUBLE, to, tag2, MPI_COMM_WORLD);
+				MPI_Send(&matrix[rowno * N], N, MPI_DOUBLE, to, tag3, MPI_COMM_WORLD);
+
+				MPI_Send(&temp, 1, MPI_INT, to, tag4, MPI_COMM_WORLD);
+				MPI_Send(&inverse[temp * N], N, MPI_DOUBLE, to, tag5, MPI_COMM_WORLD);
+				MPI_Send(&matrix[temp * N], N, MPI_DOUBLE, to, tag6, MPI_COMM_WORLD);
+
+				MPI_Recv(&inverse[rowno * N], N, MPI_DOUBLE, to, tag3, MPI_COMM_WORLD, &status);
+				MPI_Recv(&matrix[rowno * N], N, MPI_DOUBLE, to, tag4, MPI_COMM_WORLD, &status);
+
 			}
+		}
 
-			for(dest = 1; dest <= rem; dest++)
+		// int dummy = 1;
+		// for(int k = 1; k < numtasks; k++)
+		// 	MPI_Send(&dummy, 1, MPI_INT, k, STOP, COMM);
+	}
+
+	if(taskid > MASTER)
+	{
+		while(true)
+		{
+			// terminate all processes which are not really needed
+			if(taskid >= N)
+				break;
+
+			// cout << "[" << taskid << "]" << "Hello" << endl;
+			int idx, pivot, current;
+
+			MPI_Recv(&idx, 1, MPI_INT, MASTER, tag1, MPI_COMM_WORLD, &status);
+			MPI_Recv(&inverse[idx * N], N, MPI_DOUBLE, MASTER, tag2, MPI_COMM_WORLD, &status);
+			MPI_Recv(&matrix[idx * N], N, MPI_DOUBLE, MASTER, tag3, MPI_COMM_WORLD, &status);
+
+			current = idx;
+			// cout << "C: " << current << endl;
+
+			MPI_Recv(&idx, 1, MPI_INT, MASTER, tag4, MPI_COMM_WORLD, &status);
+			MPI_Recv(&inverse[idx * N], N, MPI_DOUBLE, MASTER, tag5, MPI_COMM_WORLD, &status);
+			MPI_Recv(&matrix[idx * N], N, MPI_DOUBLE, MASTER, tag6, MPI_COMM_WORLD, &status);
+
+			pivot = idx;
+
+			double multiplier = matrix[current * N + pivot] / matrix[pivot * N + pivot];
+			for(int it = 0; it < N; it++)
 			{
-				recvrow++;
-				if(recvrow == row)
-					recvrow++;
-
-				cout << "[" << taskid << "] " << "Receiving, process - " << dest << endl;
-				MPI_Recv(&matrix[recvrow * N], N, MPI_DOUBLE, dest, dest, MPI_COMM_WORLD, &status);
-				MPI_Recv(&inverse[recvrow * N], N, MPI_DOUBLE, dest, dest, MPI_COMM_WORLD, &status);
+				matrix[current * N + it] -= (matrix[pivot * N + it] * multiplier);
+				inverse[current * N + it] -= (inverse[pivot * N + it] * multiplier);
 			}
 
-			if(flag == 1)
-			{
-				MPI_Finalize();
-				return 0;
-			}
+			MPI_Send(&inverse[current * N], N, MPI_DOUBLE, MASTER, tag3, MPI_COMM_WORLD);
+			MPI_Send(&matrix[current * N], N, MPI_DOUBLE, MASTER, tag4, MPI_COMM_WORLD);
 
-			for(i = 0; i < N; i++)
-			{
-				for(j = 0; j < N; j++)
-					cout<<inverse[i * N + j] << " ";
-				cout<<endl;
-			}
+			// int dummy;
+			// if(MPI_Iprobe(MPI_ANY_SOURCE, STOP, COMM, &flag, &status)) {
+			// 	MPI_Recv(&dummy, 1, MPI_INT, MPI_ANY_SOURCE, STOP, COMM, NO_STATUS);
+			// 	break;
+			// }
 
-			row++;
-			column++;
-
-			// MPI_Barrier(MPI_COMM_WORLD);
+			// last computation, so terminate
+			if(pivot == N - 1 && current > N - numtasks - 1)
+				break;
 		}
 	}
 
-	for(int k = 0; k < N; k++)
+	if(taskid == MASTER)
 	{
-		/***** Non-master tasks only *****/
-		if (taskid > MASTER)
-		{
-			cout << "[" << taskid << "] " << "Loops: " << loops << " Rem: "<< rem << endl;
-			for(j = 0; j < loops; j++)
-			{
-				/* Receive my portion of array from the master task */
-				source = MASTER;
-
-				cout << "[" << taskid << "] " << "ID - " << taskid << endl;
-
-				MPI_Recv(&row, 1, MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
-				MPI_Recv(&rowno, 1, MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
-
-				double divisor = matrix[rowno * N + row] / matrix[row * N + row];
-
-				cout << "[" << taskid << "] " << "Process " << taskid << " got row - " << rowno << endl;
-
-				for(i = 0; i < N; i++)
-				{
-					matrix[rowno * N + i] = matrix[rowno * N + i] - (matrix[row * N + i] * divisor);
-					inverse[rowno * N + i] = inverse[rowno * N + i] - (inverse[row * N + i] * divisor);
-				}
-
-				MPI_Send(&matrix[rowno * N], N, MPI_DOUBLE, source, taskid, MPI_COMM_WORLD);
-				MPI_Send(&inverse[rowno * N], N, MPI_DOUBLE, source, taskid, MPI_COMM_WORLD);
-
-				cout << "[" << taskid << "] " << "Sent from " << taskid ;
-			}
-
-			if( taskid <= rem )
-			{
-				/* Receive my portion of array from the master task */
-				source = MASTER;
-
-				cout << "[" << taskid << "] " << "Process ID - " << taskid << endl;
-
-				MPI_Recv(&row, 1, MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
-				MPI_Recv(&rowno, 1, MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
-
-				double divisor = matrix[rowno * N + row] / matrix[row * N + row];
-
-				cout << "[" << taskid << "] " << "MPI process " << taskid << " got row - " << rowno << endl;
-
-				for(i = 0; i < N; i++)
-				{
-					matrix[rowno * N + i] = matrix[rowno * N + i] - (matrix[row * N + i] * divisor);
-					// inverse[rowno * N + i] = inverse[rowno * N + i] - (inverse[row * N + i] * divisor);
-				}
-
-				MPI_Send(&matrix[rowno * N], N, MPI_DOUBLE, source, taskid, MPI_COMM_WORLD);
-				MPI_Send(&inverse[rowno * N], N, MPI_DOUBLE, source, taskid, MPI_COMM_WORLD);
-
-				cout << "[" << taskid << "] " << "Sent from " << taskid << endl;
-			}
-
-			// MPI_Barrier(MPI_COMM_WORLD);
-		} /* end of non-master */
-	}
-
-	if( taskid == MASTER )
-	{
-		// cout<< "Hello" << endl;
-		// for(i = 0; i < N; i++)
-		// {
-		// 	for(j = 0; j < N; j++)
-		// 		cout<<inverse[i * N + j] << " ";
-		// 	cout<<endl;
-		// }
+		printmatrix(inverse, N);
 	}
 
 	MPI_Finalize();

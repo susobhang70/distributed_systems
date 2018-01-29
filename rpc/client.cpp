@@ -9,8 +9,8 @@ using namespace std;
 int main(int argc, char *argv[])
 {
     CLIENT *Client;
-    input cmd;
-    result *res;
+    buffer cmd;
+    buffer *res;
     char host[256];
 
     gethostname(host, 256);
@@ -26,9 +26,11 @@ int main(int argc, char *argv[])
 	for (int i = 1; i < argc; i++)
 		command = command + " " + argv[i];
 
-	strcpy (cmd.command, command.c_str());
+    char c[10000];
+	strcpy (c, command.c_str());
+    cmd.data = c;
 
     res = rls_1(&cmd, Client);
-    cout << "Result of rls:\n" << res->output << endl;
+    cout << "Result of rls:\n" << res->data << endl;
     return 0;
 }

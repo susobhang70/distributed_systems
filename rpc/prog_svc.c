@@ -20,7 +20,7 @@ static void
 rlsprog_1(struct svc_req *rqstp, register SVCXPRT *transp)
 {
 	union {
-		input rls_1_arg;
+		buffer rls_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -32,8 +32,8 @@ rlsprog_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		return;
 
 	case RLS:
-		_xdr_argument = (xdrproc_t) xdr_input;
-		_xdr_result = (xdrproc_t) xdr_result;
+		_xdr_argument = (xdrproc_t) xdr_buffer;
+		_xdr_result = (xdrproc_t) xdr_buffer;
 		local = (char *(*)(char *, struct svc_req *)) rls_1_svc;
 		break;
 

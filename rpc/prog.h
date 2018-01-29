@@ -14,41 +14,34 @@ extern "C" {
 #endif
 
 
-struct input {
-	char command[1024];
+struct buffer {
+	char *data;
 };
-typedef struct input input;
-
-struct result {
-	char output[1024];
-};
-typedef struct result result;
+typedef struct buffer buffer;
 
 #define RLSPROG 0x20000008
 #define RLSVERS 1
 
 #if defined(__STDC__) || defined(__cplusplus)
 #define RLS 1
-extern  result * rls_1(input *, CLIENT *);
-extern  result * rls_1_svc(input *, struct svc_req *);
+extern  buffer * rls_1(buffer *, CLIENT *);
+extern  buffer * rls_1_svc(buffer *, struct svc_req *);
 extern int rlsprog_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
 #define RLS 1
-extern  result * rls_1();
-extern  result * rls_1_svc();
+extern  buffer * rls_1();
+extern  buffer * rls_1_svc();
 extern int rlsprog_1_freeresult ();
 #endif /* K&R C */
 
 /* the xdr functions */
 
 #if defined(__STDC__) || defined(__cplusplus)
-extern  bool_t xdr_input (XDR *, input*);
-extern  bool_t xdr_result (XDR *, result*);
+extern  bool_t xdr_buffer (XDR *, buffer*);
 
 #else /* K&R C */
-extern bool_t xdr_input ();
-extern bool_t xdr_result ();
+extern bool_t xdr_buffer ();
 
 #endif /* K&R C */
 
